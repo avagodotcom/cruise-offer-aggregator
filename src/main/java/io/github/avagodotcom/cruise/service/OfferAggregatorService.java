@@ -9,10 +9,9 @@ import io.github.avagodotcom.cruise.persistence.RunRepository;
 import io.github.avagodotcom.cruise.persistence.VendorHealthRepository;
 import io.github.avagodotcom.cruise.suppliers.SupplierClient;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.Consumer;
 
 public class OfferAggregatorService {
     private final List<SupplierClient> suppliers;
@@ -31,44 +30,71 @@ public class OfferAggregatorService {
     }
 
     public SearchResult search(SearchRequest req) throws Exception {
+        return search(req, 900, null);
+    }
+
+    public SearchResult search(SearchRequest req, long timeoutMs, Consumer<SupplierUpdate> onUpdate) throws Exception {
         long runId = runRepo.insertRun(req);
 
         ExecutorService exec = Executors.newFixedThreadPool(Math.min(4, suppliers.size()));
-        List<Callable<SupplierCallResult>> tasks = new ArrayList<>();
+        CompletionService<SupplierCallResult> cs = new ExecutorCompletionService<>(exec);
 
+        Map<Future<SupplierCallResult>, SupplierClient> futureToSupplier = new HashMap<>();
         for (SupplierClient s : suppliers) {
-            tasks.add(() -> callSupplier(s, req));
+            Future<SupplierCallResult> f = cs.submit(() -> callSupplier(s, req));
+            futureToSupplier.put(f, s);
         }
 
         List<Offer> allOffers = new ArrayList<>();
         List<SupplierStatus> statuses = new ArrayList<>();
 
-        long globalTimeoutMs = 1500;
+        long deadline = System.currentTimeMillis() + timeoutMs;
 
         try {
-            List<Future<SupplierCallResult>> futures = exec.invokeAll(tasks, globalTimeoutMs, TimeUnit.MILLISECONDS);
+            while (!futureToSupplier.isEmpty()) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) break;
 
-            for (int i = 0; i < futures.size(); i++) {
-                SupplierClient supplier = suppliers.get(i);
-                Future<SupplierCallResult> f = futures.get(i);
+                Future<SupplierCallResult> done = cs.poll(remaining, TimeUnit.MILLISECONDS);
+                if (done == null) break; // timed out waiting for any more completions
 
-                if (f.isCancelled()) {
-                    statuses.add(new SupplierStatus(supplier.vendorName(), "TIMEOUT", globalTimeoutMs, "Timed out"));
-                    healthRepo.markError(supplier.vendorName(), "Timeout");
-                    continue;
-                }
+                SupplierClient supplier = futureToSupplier.remove(done);
 
                 try {
-                    SupplierCallResult r = f.get();
-                    statuses.add(new SupplierStatus(r.vendor, "OK", r.elapsedMs, null));
+                    SupplierCallResult r = done.get(); // already completed
+                    SupplierStatus st = new SupplierStatus(r.vendor, "OK", r.elapsedMs, null);
+                    statuses.add(st);
                     healthRepo.markSuccess(r.vendor);
                     allOffers.addAll(r.offers);
+
+                    if (onUpdate != null) {
+                        onUpdate.accept(new SupplierUpdate(r.vendor, r.offers, st));
+                    }
                 } catch (ExecutionException ex) {
                     String msg = ex.getCause() == null ? ex.toString() : ex.getCause().toString();
-                    statuses.add(new SupplierStatus(supplier.vendorName(), "ERROR", 0, msg));
+                    SupplierStatus st = new SupplierStatus(supplier.vendorName(), "ERROR", 0, msg);
+                    statuses.add(st);
                     healthRepo.markError(supplier.vendorName(), msg);
+
+                    if (onUpdate != null) {
+                        onUpdate.accept(new SupplierUpdate(supplier.vendorName(), List.of(), st));
+                    }
                 }
             }
+
+            for (Map.Entry<Future<SupplierCallResult>, SupplierClient> e : futureToSupplier.entrySet()) {
+                e.getKey().cancel(true);
+                SupplierClient s = e.getValue();
+
+                SupplierStatus st = new SupplierStatus(s.vendorName(), "TIMEOUT", timeoutMs, "Timed out");
+                statuses.add(st);
+                healthRepo.markError(s.vendorName(), "Timeout");
+
+                if (onUpdate != null) {
+                    onUpdate.accept(new SupplierUpdate(s.vendorName(), List.of(), st));
+                }
+            }
+
         } finally {
             exec.shutdownNow();
         }
@@ -78,6 +104,7 @@ public class OfferAggregatorService {
 
         return new SearchResult(allOffers, statuses);
     }
+
 
     private SupplierCallResult callSupplier(SupplierClient s, SearchRequest req) throws Exception {
         long t0 = System.nanoTime();

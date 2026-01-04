@@ -2,13 +2,14 @@
   "vendor": "VendorA",
   "offers": [
     { "id": "A-100", "shipCode": "FR", "sailDate": "2026-07-25", "nights": 5, "cabinClass": "INTERIOR", "price": 174268, "currency": "USD" },
-    { "id": "A-101", "shipCode": "FR", "sailDate": "2026-07-27", "nights": 4, "cabinClass": "INTERIOR", "price": 165999, "currency": "USD" },
+    { "id": "A-101", "shipCode": "FR", "sailDate": "2026-07-18", "nights": 7, "cabinClass": "INTERIOR", "price": 165999, "currency": "USD" },
     { "id": "A-102", "shipCode": "FR", "sailDate": "2026-07-28", "nights": 7, "cabinClass": "INTERIOR", "price": 205500, "currency": "USD" },
 
-    { "id": "A-110", "shipCode": "FR", "sailDate": "2026-07-29", "nights": 3, "cabinClass": "INTERIOR", "price": 139999, "currency": "USD" },
+    { "id": "A-110", "shipCode": "FR", "sailDate": "2026-07-17", "nights": 3, "cabinClass": "BALCONY", "price": 239999, "currency": "USD" },
+    { "id": "A-111", "shipCode": "IC", "sailDate": "2026-07-24", "nights": 14, "cabinClass": "INTERIOR", "price": 998999, "currency": "USD" },
 
-    { "id": "A-200", "shipCode": "OD", "sailDate": "2026-07-26", "nights": 7, "cabinClass": "OCEANVIEW", "price": 219900, "currency": "USD" },
-    { "id": "A-201", "shipCode": "OD", "sailDate": "2026-07-28", "nights": 7, "cabinClass": "INTERIOR", "price": 199500, "currency": "USD" }
+    { "id": "A-200", "shipCode": "OD", "sailDate": "2026-07-26", "nights": 7, "cabinClass": "OCEANVIEW", "price": 419900, "currency": "USD" },
+    { "id": "A-201", "shipCode": "OD", "sailDate": "2026-07-28", "nights": 7, "cabinClass": "INTERIOR", "price": 399500, "currency": "USD" }
   ]
 }
 
