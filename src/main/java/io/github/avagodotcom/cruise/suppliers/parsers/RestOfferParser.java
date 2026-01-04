@@ -25,9 +25,9 @@ public class RestOfferParser {
             LocalDate date = LocalDate.parse(n.path("sailDate").asText());
             String cabin = n.path("cabinClass").asText();
 
-            if (!ship.equalsIgnoreCase(req.shipCode())) continue;
+            if (!matchesFilter(req.shipCode(), ship)) continue;
             if (!date.equals(req.sailDate())) continue;
-            if (!cabin.equalsIgnoreCase(req.cabinClass())) continue;
+            if (!matchesFilter(req.cabinClass(), cabin)) continue;
 
             String id = n.path("id").asText();
             int nights = n.path("nights").asInt();
@@ -47,4 +47,10 @@ public class RestOfferParser {
         }
         return out;
     }
+
+    private static boolean matchesFilter(String filter, String value) {
+        if (filter == null || filter.isBlank() || "*".equals(filter)) return true;
+        return filter.equalsIgnoreCase(value);
+    }
+
 }

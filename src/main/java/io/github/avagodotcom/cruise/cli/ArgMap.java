@@ -37,8 +37,18 @@ public class ArgMap {
         return (v == null || v.isBlank()) ? null : v.trim();
     }
 
+    public String optOrDefault(String key, String defaultValue) {
+        String v = opt(key);
+        return (v == null) ? defaultValue : v;
+    }
+
     public Integer optInt(String key) {
         String v = opt(key);
         return (v == null) ? null : Integer.parseInt(v);
+    }
+
+    public int optIntOrDefault(String key, int defaultValue) {
+        String v = opt(key);
+        return (v == null) ? defaultValue : Integer.parseInt(v);
     }
 }

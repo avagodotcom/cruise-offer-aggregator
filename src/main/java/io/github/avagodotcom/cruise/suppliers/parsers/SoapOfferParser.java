@@ -35,9 +35,9 @@ public class SoapOfferParser {
             long priceCents = Long.parseLong(childText(offerNode, "PriceCents"));
             String currency = childText(offerNode, "Currency");
 
-            if (!ship.equalsIgnoreCase(req.shipCode())) continue;
+            if (!matchesFilter(req.shipCode(), ship)) continue;
             if (!date.equals(req.sailDate())) continue;
-            if (!cabin.equalsIgnoreCase(req.cabinClass())) continue;
+            if (!matchesFilter(req.cabinClass(), cabin)) continue;
 
             out.add(new Offer(
                     vendor,
@@ -65,4 +65,10 @@ public class SoapOfferParser {
         if (nl.getLength() == 0) throw new IllegalArgumentException("Missing tag: " + tag);
         return nl.item(0).getTextContent().trim();
     }
+
+    private static boolean matchesFilter(String filter, String value) {
+        if (filter == null || filter.isBlank() || "*".equals(filter)) return true;
+        return filter.equalsIgnoreCase(value);
+    }
+
 }

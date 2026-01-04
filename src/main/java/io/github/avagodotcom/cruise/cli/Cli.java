@@ -1,15 +1,21 @@
 package io.github.avagodotcom.cruise.cli;
 
+import io.github.avagodotcom.cruise.domain.Offer;
 import io.github.avagodotcom.cruise.domain.SearchRequest;
+import io.github.avagodotcom.cruise.domain.SearchResult;
+import io.github.avagodotcom.cruise.domain.SupplierStatus;
 import io.github.avagodotcom.cruise.persistence.Db;
 import io.github.avagodotcom.cruise.persistence.OfferRepository;
 import io.github.avagodotcom.cruise.persistence.RunRepository;
 import io.github.avagodotcom.cruise.persistence.VendorHealthRepository;
 import io.github.avagodotcom.cruise.service.OfferAggregatorService;
+import io.github.avagodotcom.cruise.suppliers.DelayedSupplier;
 import io.github.avagodotcom.cruise.suppliers.FixtureRestSupplier;
 import io.github.avagodotcom.cruise.suppliers.FixtureSoapSupplier;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public class Cli {
@@ -17,6 +23,11 @@ public class Cli {
 
     public Cli(Db db) {
         this.db = db;
+    }
+
+    static boolean isOnboard(LocalDate depart, int nights, LocalDate onDate) {
+        LocalDate arrive = depart.plusDays(nights);
+        return depart.isBefore(onDate) && onDate.isBefore(arrive);
     }
 
     public void run(String[] args) throws Exception {
@@ -33,6 +44,7 @@ public class Cli {
             case "history" -> handleHistory(rest);
             case "vendors" -> handleVendors();
             case "special" -> handleSpecial(rest);
+            case "onboard" -> handleOnboard(rest);
             default -> {
                 System.err.println("Unknown command: " + cmd);
                 printUsage();
@@ -51,16 +63,7 @@ public class Cli {
                 am.req("--cabin")
         );
 
-        var suppliers = List.of(
-                new FixtureRestSupplier("/fixtures/vendorA_rest.json", "VendorA"),
-                new FixtureSoapSupplier("/fixtures/vendorB_soap.xml", "VendorB")
-        );
-
-        var runRepo = new RunRepository(db);
-        var offerRepo = new OfferRepository(db);
-        var healthRepo = new VendorHealthRepository(db);
-
-        var svc = new OfferAggregatorService(suppliers, offerRepo, runRepo, healthRepo);
+        var svc = buildService();
         var result = svc.search(req);
 
         System.out.println("---- Offers (sorted by price) ----");
@@ -116,6 +119,73 @@ public class Cli {
         }
     }
 
+    private void handleOnboard(String[] args) throws Exception {
+        ArgMap am = ArgMap.parse(args);
+
+        var onDate = LocalDate.parse(am.req("--on"));
+        int maxNights = Integer.parseInt(am.optOrDefault("--maxNights", "14"));
+
+        // Optional filters. If missing, use wildcard.
+        String ship = am.optOrDefault("--ship", "*");
+        String cabin = am.optOrDefault("--cabin", "*");
+
+        // Optional: let user pass pax; otherwise defaults.
+        int adults = Integer.parseInt(am.optOrDefault("--adults", "2"));
+        int children = Integer.parseInt(am.optOrDefault("--children", "0"));
+
+        var svc = buildService();
+
+        LocalDate from = onDate.minusDays(maxNights);
+        LocalDate to = onDate.minusDays(1);
+
+        List<Offer> matches = new ArrayList<>();
+        List<SupplierStatus> lastStatuses = List.of();
+
+        for (LocalDate depart = from; !depart.isAfter(to); depart = depart.plusDays(1)) {
+            SearchRequest req = new SearchRequest(
+                    ship,
+                    depart,
+                    adults,
+                    children,
+                    cabin
+            );
+
+            SearchResult res = svc.search(req);
+            lastStatuses = res.statuses();
+
+            for (Offer o : res.offers()) {
+                if (isOnboard(o.sailDate(), o.nights(), onDate)) {
+                    matches.add(o);
+                }
+            }
+        }
+
+        matches.sort(Comparator.comparingLong(o -> o.price().cents()));
+
+        System.out.println("---- Cruises ONBOARD on " + onDate + " (strict: not embark/debark day) ----");
+        if (matches.isEmpty()) {
+            System.out.println("(no matches found in departure window " + from + " .. " + to + ")");
+        } else {
+            for (Offer o : matches) {
+                LocalDate debark = o.sailDate().plusDays(o.nights());
+                System.out.printf(
+                        "%s | %s depart=%s nights=%d debark=%s | %s | %s | rawId=%s%n",
+                        o.vendor(), o.shipCode(), o.sailDate(), o.nights(), debark,
+                        o.cabinClass(), o.price().format(), o.rawOfferId()
+                );
+            }
+        }
+
+        System.out.println("\n---- Supplier Status (last call) ----");
+        for (SupplierStatus st : lastStatuses) {
+            System.out.printf("%s => %s (%d ms)%s%n",
+                    st.vendor(), st.status(), st.elapsedMs(),
+                    (st.errorMessage() == null ? "" : " | " + st.errorMessage()));
+        }
+    }
+
+
+
     private void handleSpecial(String[] args) throws Exception {
         ArgMap am = ArgMap.parse(args);
 
@@ -162,5 +232,21 @@ public class Cli {
         String[] out = new String[a.length - start];
         System.arraycopy(a, start, out, 0, out.length);
         return out;
+    }
+
+    private OfferAggregatorService buildService() {
+        var suppliers = List.of(
+                new FixtureRestSupplier("/fixtures/vendorA_rest.json", "VendorA"),
+                new FixtureSoapSupplier("/fixtures/vendorB_soap.xml", "VendorB"),
+                new DelayedSupplier(
+                        new FixtureRestSupplier("/fixtures/legacy_gds_rest.json", "LEGACY_GDS"), 50
+                )
+        );
+
+        var runRepo = new RunRepository(db);
+        var offerRepo = new OfferRepository(db);
+        var healthRepo = new VendorHealthRepository(db);
+
+        return new OfferAggregatorService(suppliers, offerRepo, runRepo, healthRepo);
     }
 }
