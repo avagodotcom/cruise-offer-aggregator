@@ -1,0 +1,18 @@
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <soap:Body>
+        <GetOffersResponse>
+            <Vendor>VendorB</Vendor>
+            <Offers>
+                <Offer>
+                    <Id>B-900</Id>
+                    <ShipCode>FR</ShipCode>
+                    <SailDate>2026-07-25</SailDate>
+                    <Nights>5</Nights>
+                    <CabinClass>INTERIOR</CabinClass>
+                    <PriceCents>169999</PriceCents>
+                    <Currency>USD</Currency>
+                </Offer>
+            </Offers>
+        </GetOffersResponse>
+    </soap:Body>
+</soap:Envelope>

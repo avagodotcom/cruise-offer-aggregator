@@ -1,0 +1,7 @@
+{
+  "vendor": "VendorA",
+  "offers": [
+    { "id": "A-100", "shipCode": "FR", "sailDate": "2026-07-25", "nights": 5, "cabinClass": "INTERIOR", "price": 174268, "currency": "USD" },
+    { "id": "A-101", "shipCode": "FR", "sailDate": "2026-07-25", "nights": 5, "cabinClass": "BALCONY",  "price": 289900, "currency": "USD" }
+  ]
+}
